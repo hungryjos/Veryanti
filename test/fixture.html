@@ -110,6 +110,21 @@
   preroll.onload = function () { window.__results.playbackStarted = true; };
   preroll.send();
 
+  // 9. Command queue: the player parks its start-up callback in the ad
+  //    library's queue. If nothing drains that queue, playback never begins.
+  window.__results.queueRan = false;
+  (window.googletag = window.googletag || { cmd: [] }).cmd.push(function () {
+    window.__results.queueRan = true;
+  });
+
+  // 10. An SDK call that throws takes the rest of the function with it,
+  //     including the line right after it that starts the player.
+  window.__results.afterSdkCall = false;
+  try {
+    window.ExoLoader.addZone({ zone: 123 });
+    window.__results.afterSdkCall = true;
+  } catch (e) { /* the player never gets here */ }
+
   // 7. Timer that keeps re-showing the wall.
   setInterval(function adblockWatchdog() {
     if (!document.getElementById('adblock-overlay')) showWall();

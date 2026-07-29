@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Veryanti
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.6.0
+// @version      1.7.0
 // @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes nag overlays and restores page scrolling.
 // @author       hungryjos
 // @license      MIT
@@ -140,7 +140,7 @@
     // Small helpers
     // =====================================================================
 
-    const VERSION = '1.6.0';
+    const VERSION = '1.7.0';
     const win = window;
     const doc = document;
     const TAG = '%c[Veryanti]';
@@ -463,6 +463,109 @@
         }
     }
 
+    /**
+     * An object that swallows anything done to it: every property is another
+     * one of itself, and calling it returns one too. Stands in for an ad SDK
+     * whose script never loaded, so page code calling into it does not throw
+     * and take the rest of its function down with it.
+     */
+    function makeSilentStub() {
+        const noop = function () { return stub; };
+        const stub = new Proxy(noop, {
+            get(target, prop) {
+                if (prop === 'then' || prop === Symbol.toStringTag) return undefined;
+                if (prop === Symbol.toPrimitive) return () => '';
+                if (prop === 'length') return 0;
+                if (prop === 'valueOf') return () => '';
+                if (prop === 'toString') return () => '';
+                return stub;
+            },
+            set() { return true; },
+            apply() { return stub; },
+            construct() { return stub; },
+            has() { return true; },
+        });
+        return stub;
+    }
+
+    /**
+     * A command queue that actually runs what is pushed into it. Players park
+     * their start-up callback in googletag.cmd or pbjs.que and wait for the
+     * ad library to drain it; if that library is blocked, the callback never
+     * runs and the video never starts.
+     */
+    function makeRunningQueue(label) {
+        const queue = [];
+        queue.push = function (...entries) {
+            for (const entry of entries) {
+                if (typeof entry !== 'function') continue;
+                try {
+                    entry();
+                    log('ran a queued callback from ' + label);
+                } catch (err) {
+                    log('queued callback from ' + label + ' threw:', String(err));
+                }
+            }
+            return 0;
+        };
+        return queue;
+    }
+
+    /**
+     * Stand-ins for the ad libraries the blocker keeps out. Without these the
+     * page loads an empty script, calls into an SDK that is not there and
+     * stops halfway through whatever else that function was doing.
+     */
+    function installAdSdkStubs() {
+        const silent = makeSilentStub();
+
+        lockGlobal('googletag', {
+            cmd: makeRunningQueue('googletag.cmd'),
+            apiReady: true,
+            pubadsReady: true,
+            display: () => {},
+            enableServices: () => {},
+            destroySlots: () => true,
+            defineSlot: () => silent,
+            defineOutOfPageSlot: () => silent,
+            sizeMapping: () => silent,
+            pubads: () => silent,
+            companionAds: () => silent,
+            content: () => silent,
+        });
+
+        lockGlobal('pbjs', {
+            que: makeRunningQueue('pbjs.que'),
+            cmd: makeRunningQueue('pbjs.cmd'),
+            libLoaded: true,
+            setConfig: () => {},
+            addAdUnits: () => {},
+            removeAdUnit: () => {},
+            enableAnalytics: () => {},
+            getAdserverTargeting: () => ({}),
+            getHighestCpmBids: () => [],
+            // Hand the caller an empty bid set so it stops waiting.
+            requestBids: (options) => {
+                if (options && typeof options.bidsBackHandler === 'function') {
+                    try { options.bidsBackHandler({}, true); } catch (e) { /* ignore */ }
+                }
+            },
+        });
+
+        // ExoClick and the popunder libraries common on tube sites.
+        lockGlobal('ExoLoader', silent);
+        lockGlobal('ExoSense', silent);
+        lockGlobal('popMagic', silent);
+        lockGlobal('popns', silent);
+        lockGlobal('TrafficJunky', silent);
+
+        if (!Array.isArray(win.AdProvider)) {
+            lockGlobal('AdProvider', makeRunningQueue('AdProvider'));
+        }
+
+        log('ad SDK stubs installed');
+    }
+
     function installDetectorStubs() {
         const Stub = makeFuckAdBlockStub();
         const instance = new Stub();
@@ -481,6 +584,8 @@
             if (value === undefined) return;
             lockGlobal(name, value);
         });
+
+        installAdSdkStubs();
 
         // adsbygoogle: accept pushes silently so no error path is triggered.
         if (!Array.isArray(win.adsbygoogle)) {

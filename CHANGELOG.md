@@ -3,6 +3,21 @@
 De versie bovenaan dit bestand moet gelijk zijn aan `@version` in
 `veryanti.user.js` — `npm test` controleert dat.
 
+## 1.7.0
+
+* Nabootsing van de advertentie-SDK's zelf. Het geblokkeerde `ads.js` werd al
+  vervangen door een leeg script, maar alles wat dat script normaal aanmaakt
+  bestond daarna niet: de pagina roept `ExoLoader.addZone(...)` aan, dat gooit
+  een fout, en de rest van diezelfde functie — inclusief het starten van de
+  speler — wordt nooit uitgevoerd. Er staan nu stille stand-ins klaar voor
+  `ExoLoader`, `ExoSense`, `popMagic`, `popns`, `TrafficJunky` en `AdProvider`.
+* Opdrachtwachtrijen worden nu daadwerkelijk afgehandeld: wat in
+  `googletag.cmd` of `pbjs.que` wordt gezet, draait meteen. Spelers parkeren
+  hun startcallback daar en wachten tot de advertentiebibliotheek de rij
+  leegtrekt; is die geblokkeerd, dan gebeurt dat nooit.
+* `pbjs.requestBids` geeft een lege biedronde terug, zodat de aanroeper niet
+  blijft wachten.
+
 ## 1.6.0
 
 * Geblokkeerde advertentieverzoeken krijgen nu een bruikbaar antwoord in

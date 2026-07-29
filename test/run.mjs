@@ -59,6 +59,8 @@ async function run({ withScript, query = '' }) {
         contentIntact: !!document.getElementById('content'),
         scrollLocked: getComputedStyle(document.body).overflow === 'hidden',
         playbackStarted: window.__results.playbackStarted === true,
+        queueRan: window.__results.queueRan === true,
+        afterSdkCall: window.__results.afterSdkCall === true,
         playerPresent: !!document.getElementById('player'),
         playerHidden: (() => {
             const player = document.getElementById('player');
@@ -88,6 +90,8 @@ function report(label, state) {
     console.log(`  scroll locked   : ${state.scrollLocked}`);
     console.log(`  player hidden   : ${state.playerHidden}`);
     console.log(`  playback started: ${state.playbackStarted}`);
+    console.log(`  ad queue ran    : ${state.queueRan}`);
+    console.log(`  survived sdk call: ${state.afterSdkCall}`);
     if (state.layers) {
         console.log(`  layers active   : ${state.layers.installed.join(', ')}`);
         for (const failure of state.layers.failed) {
@@ -117,6 +121,12 @@ if (!patched.contentIntact) failures.push('page content was removed along with t
 if (patched.scrollLocked) failures.push('scrolling is still locked');
 if (!patched.playbackStarted) {
     failures.push('the blocked preroll was not answered, so playback never started');
+}
+if (!patched.queueRan) {
+    failures.push('the ad library queue was never drained, so its callback never ran');
+}
+if (!patched.afterSdkCall) {
+    failures.push('a call into the missing ad SDK threw and killed the rest of the function');
 }
 // Every layer must actually install: a layer that throws at boot used to go
 // unnoticed because the other layers hid the symptom.
