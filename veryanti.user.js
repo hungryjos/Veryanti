@@ -2,7 +2,7 @@
 // @name         Veryanti — anti-adblock neutralizer
 // @name:nl      Veryanti — anti-adblock neutralisator
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.3.0
+// @version      1.4.0
 // @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes "disable your adblocker" overlays and restores page scrolling.
 // @description:nl  Schakelt anti-adblock muren uit: maakt lokaas-elementen "zichtbaar", vervangt detectie-bibliotheken, spooft geblokkeerde ad-requests, verwijdert "zet je adblocker uit"-overlays en herstelt het scrollen.
 // @author       hungryjos
@@ -14,6 +14,11 @@
 // @match        *://xadultflix.com/*
 // @match        *://www.xadultflix.com/*
 // @match        *://*.xadultflix.com/*
+// @match        https://xadultflix.com/*
+// @match        https://www.xadultflix.com/*
+// @match        https://*.xadultflix.com/*
+// @include      https://xadultflix.com/*
+// @include      https://*.xadultflix.com/*
 // @run-at       document-start
 // @grant        none
 // ==/UserScript==
@@ -134,7 +139,7 @@
     // Small helpers
     // =====================================================================
 
-    const VERSION = '1.3.0';
+    const VERSION = '1.4.0';
     const win = window;
     const doc = document;
     const TAG = '%c[Veryanti]';

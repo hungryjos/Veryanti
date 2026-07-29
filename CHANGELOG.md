@@ -3,6 +3,13 @@
 De versie bovenaan dit bestand moet gelijk zijn aan `@version` in
 `veryanti.user.js` — `npm test` controleert dat.
 
+## 1.4.0
+
+* Bredere matchregels: naast `*://` staan er nu ook expliciete `https://`
+  varianten en twee `@include`-patronen. Managers die het `*://`-schema of
+  `@match` niet volledig ondersteunen — zoals sommige mobiele apps — herkennen
+  de site daardoor alsnog.
+
 ## 1.3.0
 
 * `@updateURL` en `@downloadURL` wijzen nu naar `github.com/.../raw/...` in
