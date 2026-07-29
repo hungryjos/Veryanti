@@ -3,6 +3,14 @@
 De versie bovenaan dit bestand moet gelijk zijn aan `@version` in
 `veryanti.user.js` — `npm test` controleert dat.
 
+## 1.3.0
+
+* `@updateURL` en `@downloadURL` wijzen nu naar `github.com/.../raw/...` in
+  plaats van `raw.githubusercontent.com`. Die eerste vorm loopt over github.com
+  en gebruikt dus je sessie, waardoor bijwerken ook op een **private**
+  repository werkt; `raw.githubusercontent.com` kent geen sessie-login en geeft
+  daar altijd 404.
+
 ## 1.2.0
 
 * `@updateURL` en `@downloadURL` toegevoegd, zodat script managers zelf een

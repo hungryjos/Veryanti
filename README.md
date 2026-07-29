@@ -28,32 +28,40 @@ release aan. Versiegeschiedenis vind je onder *Releases* in de repository.
 Het script wijst met `@updateURL` en `@downloadURL` naar:
 
 ```
-https://raw.githubusercontent.com/hungryjos/Veryanti/HEAD/veryanti.user.js
+https://github.com/hungryjos/Veryanti/raw/HEAD/veryanti.user.js
 ```
 
 `HEAD` betekent "de standaardbranch", dus die link blijft kloppen als je later
 van branchnaam wisselt.
 
-> **Voorwaarde: de repository moet public staan.** Een script manager haalt die
-> URL op zonder jouw GitHub-login; bij een private repo krijgt hij een 404 en
-> gebeurt er niets. Zet de repo public via *Settings → General → Danger Zone →
-> Change visibility*. Wil je hem privé houden, dan is een **secret gist** het
-> alternatief: onvindbare URL, maar wel zonder login bereikbaar. Zet de
-> `@updateURL` en `@downloadURL` dan op de raw-URL van die gist.
+### Waarom niet raw.githubusercontent.com
+
+Bij een **private** repository maakt de vorm van de URL het verschil:
+
+| URL | Private repo |
+| --- | --- |
+| `github.com/<owner>/<repo>/raw/<ref>/<pad>` | **Werkt.** Loopt over github.com, dus je sessiecookie gaat mee en GitHub stuurt door naar de inhoud met een geldig token. |
+| `raw.githubusercontent.com/<owner>/<repo>/<ref>/<pad>` | **404.** Aparte host zonder sessie-login. Alleen bruikbaar met een `?token=`-parameter, en die verloopt. |
+
+Daarom staat de eerste vorm in de header. Die werkt ook prima op een public
+repo, dus je hoeft de repo niet openbaar te maken.
+
+De keerzijde: het bijwerken hangt aan je GitHub-sessie in de browser of app
+waar de script manager draait. Ben je daar uitgelogd, dan mislukt het ophalen
+stilletjes en blijf je op je huidige versie zitten. Wil je dat niet, dan zijn
+de alternatieven de repo public zetten of het script in een **secret gist**
+zetten — die heeft een onvindbare, maar zonder login bereikbare URL.
 
 Installeer het script in je manager **via de URL**, niet met kopiëren en
 plakken — alleen dan weet de manager waar hij later moet kijken. Voor een
 handmatig geplakt script staat er geen bron geregistreerd en gebeurt er nooit
 een update.
 
-Update-gedrag verschilt per manager. Tampermonkey en Violentmonkey vergelijken
-periodiek `@version` via `@updateURL` en halen bij een hoger nummer het bestand
-van `@downloadURL`. Kleinere of nieuwere managers — waaronder wBlock — doen dat
-niet altijd; ik kan hier niet nagaan wat jouw versie ondersteunt. Kijk in de
-instellingen van de manager of bij het script zelf naar een optie in de trant
-van "check for updates". Zit die er niet, dan is het script opnieuw toevoegen
-via dezelfde URL genoeg: dat haalt de laatste versie op. Aan de kant van dit
-script is alles wat nodig is in elk geval aanwezig.
+Update-gedrag verschilt per manager: die vergelijkt periodiek `@version` via
+`@updateURL` en haalt bij een hoger nummer het bestand van `@downloadURL`.
+Werkt een ander script van je al wél bij vanuit een private repo, kijk dan hoe
+diens `@updateURL` eruitziet en neem die vorm over — wat daar werkt, werkt
+hier ook.
 
 ## Extra sites toevoegen
 
