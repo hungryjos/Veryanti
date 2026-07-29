@@ -1,0 +1,59 @@
+name: Sync script to gist
+
+# Copies veryanti.user.js into a gist on every change, so a script manager
+# can update from the gist's raw URL. A gist is readable without a GitHub
+# login even when it is secret, which is what makes this work while the
+# repository itself stays private.
+#
+# Setup (once):
+#   1. Create a gist containing a file named veryanti.user.js.
+#   2. Repository → Settings → Secrets and variables → Actions:
+#        secret   GIST_TOKEN  a personal access token with the "gist" scope
+#        variable GIST_ID     the id in the gist URL
+# Without those two the job skips quietly.
+
+on:
+  push:
+    paths:
+      - veryanti.user.js
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: github.ref_name == github.event.repository.default_branch || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the configuration
+        id: config
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ vars.GIST_ID }}
+        run: |
+          if [ -z "$GIST_TOKEN" ] || [ -z "$GIST_ID" ]; then
+            echo "GIST_TOKEN secret or GIST_ID variable is missing — skipping the sync."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push the script into the gist
+        if: steps.config.outputs.ready == 'true'
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ vars.GIST_ID }}
+        run: |
+          jq -n --rawfile content veryanti.user.js \
+            '{files: {"veryanti.user.js": {content: $content}}}' > payload.json
+          curl -sS --fail-with-body -X PATCH \
+            -H "Authorization: Bearer $GIST_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/gists/$GIST_ID" \
+            -d @payload.json > response.json
+          version=$(sed -n 's|^// @version[[:space:]]*||p' veryanti.user.js | head -n 1)
+          echo "Gist updated to v$version: $(jq -r '.html_url' response.json)"

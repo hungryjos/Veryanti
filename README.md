@@ -34,6 +34,30 @@ https://github.com/hungryjos/Veryanti/raw/HEAD/veryanti.user.js
 `HEAD` betekent "de standaardbranch", dus die link blijft kloppen als je later
 van branchnaam wisselt.
 
+### Bijwerken via een gist (aanbevolen bij een private repo)
+
+Een gist is zonder GitHub-login op te halen, ook als hij "secret" is — de URL
+is onvindbaar, niet afgeschermd. Daarom werkt die route in elke script manager,
+terwijl deze repository gewoon privé blijft.
+
+Eenmalig instellen:
+
+1. Maak op <https://gist.github.com> een gist met één bestand,
+   naam `veryanti.user.js`, en plak de inhoud van het script erin. Secret mag.
+2. Noteer de raw-URL — die ziet eruit als
+   `https://gist.githubusercontent.com/<gebruiker>/<gist-id>/raw/veryanti.user.js`.
+   Zonder revisiehash in het pad serveert GitHub altijd de nieuwste versie.
+3. Zet die URL in `@updateURL` en `@downloadURL` bovenaan het script, en
+   installeer het script in je manager via diezelfde URL.
+
+Automatisch synchroniseren, zodat je nooit meer hoeft te plakken: zet in
+*Settings → Secrets and variables → Actions* een secret `GIST_TOKEN` (een
+personal access token met de `gist`-scope) en een variabele `GIST_ID` (het id
+uit de gist-URL). Vanaf dan kopieert
+[`.github/workflows/sync-gist.yml`](.github/workflows/sync-gist.yml) het script
+bij elke wijziging naar de gist. Ontbreken die twee, dan slaat de job zichzelf
+netjes over.
+
 ### Waarom niet raw.githubusercontent.com
 
 Bij een **private** repository maakt de vorm van de URL het verschil:
