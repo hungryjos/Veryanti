@@ -60,6 +60,7 @@ async function run({ withScript, query = '' }) {
         scrollLocked: getComputedStyle(document.body).overflow === 'hidden',
         playbackStarted: window.__results.playbackStarted === true,
         queueRan: window.__results.queueRan === true,
+        adRendered: window.__results.adRendered === true,
         afterSdkCall: window.__results.afterSdkCall === true,
         playerPresent: !!document.getElementById('player'),
         playerHidden: (() => {
@@ -91,6 +92,7 @@ function report(label, state) {
     console.log(`  player hidden   : ${state.playerHidden}`);
     console.log(`  playback started: ${state.playbackStarted}`);
     console.log(`  ad queue ran    : ${state.queueRan}`);
+    console.log(`  ad reported     : ${state.adRendered}`);
     console.log(`  survived sdk call: ${state.afterSdkCall}`);
     if (state.layers) {
         console.log(`  layers active   : ${state.layers.installed.join(', ')}`);
@@ -121,6 +123,9 @@ if (!patched.contentIntact) failures.push('page content was removed along with t
 if (patched.scrollLocked) failures.push('scrolling is still locked');
 if (!patched.playbackStarted) {
     failures.push('the blocked preroll was not answered, so playback never started');
+}
+if (!patched.adRendered) {
+    failures.push('the ad library never reported a rendered ad, so the site still sees a blocker');
 }
 if (!patched.queueRan) {
     failures.push('the ad library queue was never drained, so its callback never ran');

@@ -3,6 +3,19 @@
 De versie bovenaan dit bestand moet gelijk zijn aan `@version` in
 `veryanti.user.js` — `npm test` controleert dat.
 
+## 1.8.0
+
+* De nabootsing meldt nu ook dat er daadwerkelijk een advertentie is
+  weergegeven. De stand-ins van 1.7.0 antwoordden overal op, maar zeiden
+  nergens dat er iets gerenderd was — en juist dat vraagt een site na. Wie op
+  `slotRenderEnded`, `slotOnload`, `impressionViewable` of
+  `slotResponseReceived` luistert, krijgt nu een gebeurtenis met `isEmpty:
+  false` en een slot dat responsgegevens teruggeeft.
+* `googletag.pubads().getSlots()` geeft een gevuld slot terug in plaats van
+  niets.
+* De SDK-nabootsing is een eigen laag geworden: `#veryanti=-stubAdSdks` zet
+  alleen dat deel uit, zonder de rest aan te raken.
+
 ## 1.7.0
 
 * Nabootsing van de advertentie-SDK's zelf. Het geblokkeerde `ads.js` werd al

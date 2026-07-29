@@ -125,6 +125,18 @@
     window.__results.afterSdkCall = true;
   } catch (e) { /* the player never gets here */ }
 
+  // 11. The site asks the ad library whether anything actually rendered and
+  //     raises the wall when the answer is "nothing".
+  window.__results.adRendered = false;
+  if (window.googletag && typeof window.googletag.pubads === 'function') {
+    window.googletag.pubads().addEventListener('slotRenderEnded', function (event) {
+      if (event && event.isEmpty === false) window.__results.adRendered = true;
+    });
+  }
+  setTimeout(function () {
+    record('slot-render', window.__results.adRendered !== true);
+  }, 400);
+
   // 7. Timer that keeps re-showing the wall.
   setInterval(function adblockWatchdog() {
     if (!document.getElementById('adblock-overlay')) showWall();

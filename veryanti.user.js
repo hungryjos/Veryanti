@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Veryanti
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.7.0
+// @version      1.8.0
 // @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes nag overlays and restores page scrolling.
 // @author       hungryjos
 // @license      MIT
@@ -64,6 +64,13 @@
 
         /** Replace known adblock-detector libraries with harmless stubs. */
         stubDetectors: true,
+
+        /**
+         * Stand in for the ad libraries the blocker keeps out, and report a
+         * rendered ad when the page asks. Turn off with #veryanti=-stubAdSdks
+         * if the page behaves better without it.
+         */
+        stubAdSdks: true,
 
         /** Make blocked requests to ad hosts look like they succeeded. */
         spoofAdProbes: true,
@@ -140,7 +147,7 @@
     // Small helpers
     // =====================================================================
 
-    const VERSION = '1.7.0';
+    const VERSION = '1.8.0';
     const win = window;
     const doc = document;
     const TAG = '%c[Veryanti]';
@@ -519,6 +526,59 @@
     function installAdSdkStubs() {
         const silent = makeSilentStub();
 
+        // A slot that says an ad is in it. Sites ask the ad library after the
+        // fact — "did anything render?" — and treat silence as an adblocker.
+        const filledSlot = {
+            getSlotElementId: () => 'veryanti-slot',
+            getAdUnitPath: () => '/veryanti/slot',
+            getDomId: () => 'veryanti-slot',
+            getResponseInformation: () => ({
+                advertiserId: 1, campaignId: 1, creativeId: 1, lineItemId: 1,
+                sourceAgnosticCreativeId: 1, sourceAgnosticLineItemId: 1,
+                isBackfill: false,
+            }),
+            getSizes: () => [[300, 250]],
+            getTargeting: () => [],
+            getTargetingKeys: () => [],
+            addService: () => filledSlot,
+            defineSizeMapping: () => filledSlot,
+            setTargeting: () => filledSlot,
+            setCollapseEmptyDiv: () => filledSlot,
+        };
+
+        // Fire the "an ad rendered" events a listener is waiting for, with
+        // isEmpty false — the answer a page with working ads would get.
+        const RENDER_EVENTS = ['slotRenderEnded', 'slotOnload',
+                               'impressionViewable', 'slotResponseReceived'];
+        const pubads = {
+            addEventListener: (type, callback) => {
+                if (typeof callback === 'function' && RENDER_EVENTS.includes(type)) {
+                    nativeSetTimeout(() => {
+                        try {
+                            callback({
+                                slot: filledSlot,
+                                isEmpty: false,
+                                size: [300, 250],
+                                serviceName: 'publisher_ads',
+                            });
+                            log('reported a rendered ad for ' + type);
+                        } catch (e) { /* ignore */ }
+                    }, 0);
+                }
+                return pubads;
+            },
+            removeEventListener: () => pubads,
+            getSlots: () => [filledSlot],
+            refresh: () => {},
+            enableSingleRequest: () => pubads,
+            collapseEmptyDivs: () => pubads,
+            setTargeting: () => pubads,
+            clearTargeting: () => pubads,
+            disableInitialLoad: () => pubads,
+            setCentering: () => pubads,
+            isInitialLoadDisabled: () => false,
+        };
+
         lockGlobal('googletag', {
             cmd: makeRunningQueue('googletag.cmd'),
             apiReady: true,
@@ -526,10 +586,10 @@
             display: () => {},
             enableServices: () => {},
             destroySlots: () => true,
-            defineSlot: () => silent,
-            defineOutOfPageSlot: () => silent,
+            defineSlot: () => filledSlot,
+            defineOutOfPageSlot: () => filledSlot,
             sizeMapping: () => silent,
-            pubads: () => silent,
+            pubads: () => pubads,
             companionAds: () => silent,
             content: () => silent,
         });
@@ -584,8 +644,6 @@
             if (value === undefined) return;
             lockGlobal(name, value);
         });
-
-        installAdSdkStubs();
 
         // adsbygoogle: accept pushes silently so no error path is triggered.
         if (!Array.isArray(win.adsbygoogle)) {
@@ -1126,6 +1184,7 @@
     const steps = [
         ['fakeBaitVisibility', installBaitVisibility],
         ['stubDetectors', installDetectorStubs],
+        ['stubAdSdks', installAdSdkStubs],
         ['spoofAdProbes', installProbeSpoofing],
         ['filterTimers', installTimerFilter],
         ['cleanDom', installDomCleanup],
