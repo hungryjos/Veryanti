@@ -17,6 +17,44 @@ merkt dat je er een gebruikt.
    Of: maak in de manager een nieuw script en plak de inhoud van het bestand.
 3. Herlaad de site. Zet je adblocker gewoon aan laten staan.
 
+## Versies en automatisch bijwerken
+
+Elke versie staat in [`CHANGELOG.md`](CHANGELOG.md) en krijgt in GitHub een
+tag `vX.Y.Z` plus een release met het script als bijlage. Dat gaat vanzelf:
+zodra `@version` in `veryanti.user.js` verandert op de standaardbranch, maakt
+[`.github/workflows/release.yml`](.github/workflows/release.yml) de tag en de
+release aan. Versiegeschiedenis vind je onder *Releases* in de repository.
+
+Het script wijst met `@updateURL` en `@downloadURL` naar:
+
+```
+https://raw.githubusercontent.com/hungryjos/Veryanti/HEAD/veryanti.user.js
+```
+
+`HEAD` betekent "de standaardbranch", dus die link blijft kloppen als je later
+van branchnaam wisselt.
+
+> **Voorwaarde: de repository moet public staan.** Een script manager haalt die
+> URL op zonder jouw GitHub-login; bij een private repo krijgt hij een 404 en
+> gebeurt er niets. Zet de repo public via *Settings → General → Danger Zone →
+> Change visibility*. Wil je hem privé houden, dan is een **secret gist** het
+> alternatief: onvindbare URL, maar wel zonder login bereikbaar. Zet de
+> `@updateURL` en `@downloadURL` dan op de raw-URL van die gist.
+
+Installeer het script in je manager **via de URL**, niet met kopiëren en
+plakken — alleen dan weet de manager waar hij later moet kijken. Voor een
+handmatig geplakt script staat er geen bron geregistreerd en gebeurt er nooit
+een update.
+
+Update-gedrag verschilt per manager. Tampermonkey en Violentmonkey vergelijken
+periodiek `@version` via `@updateURL` en halen bij een hoger nummer het bestand
+van `@downloadURL`. Kleinere of nieuwere managers — waaronder wBlock — doen dat
+niet altijd; ik kan hier niet nagaan wat jouw versie ondersteunt. Kijk in de
+instellingen van de manager of bij het script zelf naar een optie in de trant
+van "check for updates". Zit die er niet, dan is het script opnieuw toevoegen
+via dezelfde URL genoeg: dat haalt de laatste versie op. Aan de kant van dit
+script is alles wat nodig is in elk geval aanwezig.
+
 ## Extra sites toevoegen
 
 Bovenaan het script staat het `@match`-blok:

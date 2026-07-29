@@ -1,0 +1,68 @@
+name: Release userscript
+
+# Tags and releases the script whenever @version changes on the default
+# branch, so every version is visible in GitHub and script managers see a
+# stable download URL.
+
+on:
+  push:
+    paths:
+      - veryanti.user.js
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.ref_name == github.event.repository.default_branch || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check the metadata block
+        run: node test/meta.mjs
+
+      - name: Read the version
+        id: version
+        run: |
+          version=$(sed -n 's|^// @version[[:space:]]*||p' veryanti.user.js | head -n 1)
+          if [ -z "$version" ]; then
+            echo "no @version found in veryanti.user.js" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "v$version is already tagged, nothing to do"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect the changelog entry
+        if: steps.version.outputs.exists == 'false'
+        run: |
+          awk -v version="${{ steps.version.outputs.version }}" '
+            $0 == "## " version { collecting = 1; next }
+            collecting && /^## / { exit }
+            collecting { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "Zie CHANGELOG.md." > release-notes.md
+          fi
+
+      - name: Tag and release
+        if: steps.version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Veryanti v$VERSION"
+          git push origin "v$VERSION"
+          gh release create "v$VERSION" veryanti.user.js \
+            --title "v$VERSION" \
+            --notes-file release-notes.md

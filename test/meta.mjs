@@ -14,7 +14,9 @@ import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const source = await readFile(join(here, '..', 'veryanti.user.js'), 'utf8');
+const root = join(here, '..');
+const source = await readFile(join(root, 'veryanti.user.js'), 'utf8');
+const changelog = await readFile(join(root, 'CHANGELOG.md'), 'utf8');
 
 const failures = [];
 const lines = source.split(/\r?\n/);
@@ -77,6 +79,27 @@ const reported = /const VERSION = '([^']+)'/.exec(source);
 if (!reported) failures.push('no VERSION constant found in the script body');
 else if (reported[1] !== version) {
     failures.push(`@version ${version} does not match VERSION ${reported[1]} in the body`);
+}
+
+// The changelog leads with the version being shipped; the release workflow
+// takes its notes from that section.
+const newestEntry = /^## (\S+)/m.exec(changelog);
+if (!newestEntry) failures.push('CHANGELOG.md has no "## <version>" entry');
+else if (newestEntry[1] !== version) {
+    failures.push(`@version ${version} is not the newest CHANGELOG entry (${newestEntry[1]})`);
+}
+
+// Auto-update needs both URLs: managers fetch @updateURL to compare versions
+// and @downloadURL for the file itself.
+for (const key of ['updateURL', 'downloadURL']) {
+    const value = (directives.get(key) || [])[0];
+    if (!value) {
+        failures.push(`missing @${key}, so script managers cannot auto-update`);
+    } else if (!/^https:\/\//.test(value)) {
+        failures.push(`@${key} must be https: ${value}`);
+    } else if (!value.endsWith('.user.js')) {
+        failures.push(`@${key} must end in .user.js: ${value}`);
+    }
 }
 
 console.log('metadata directives:');
