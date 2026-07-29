@@ -183,6 +183,7 @@ van Veryanti:
 | `#veryanti=off` | Alles uit. Blijft het probleem, dan ligt het niet aan dit script. |
 | `#veryanti=-filterTimers` | Alleen die laag uit. Elke sleutel uit `CONFIG` werkt. |
 | `#veryanti=debug` | Logging aan in de console. |
+| `#veryanti=panel` | Logging op de pagina zelf, in een venster onderaan. Dubbeltik erop om het te sluiten. Op een telefoon is dit de enige manier om mee te kijken. |
 | `#veryanti=debug,-blockPopups` | Combineren met komma's. |
 
 Speelt een video niet, begin dan met `#veryanti=off`. Speelt hij dan wél, loop

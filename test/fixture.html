@@ -101,6 +101,15 @@
   probe.onload = function () { record('script-probe', false); };
   document.head.appendChild(probe);
 
+  // 8. Preroll: the player asks an ad host for a VAST tag and only starts
+  //    playing once it gets an answer. A blocked request leaves it waiting
+  //    forever, which is what a dead play button looks like.
+  window.__results.playbackStarted = false;
+  var preroll = new XMLHttpRequest();
+  preroll.open('GET', 'https://s.exoclick.com/vast.xml?zoneid=12345');
+  preroll.onload = function () { window.__results.playbackStarted = true; };
+  preroll.send();
+
   // 7. Timer that keeps re-showing the wall.
   setInterval(function adblockWatchdog() {
     if (!document.getElementById('adblock-overlay')) showWall();

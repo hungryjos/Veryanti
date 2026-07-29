@@ -3,6 +3,19 @@
 De versie bovenaan dit bestand moet gelijk zijn aan `@version` in
 `veryanti.user.js` — `npm test` controleert dat.
 
+## 1.6.0
+
+* Geblokkeerde advertentieverzoeken krijgen nu een bruikbaar antwoord in
+  plaats van niets. Een speler die om een preroll vraagt en een netwerkfout
+  krijgt, blijft eeuwig wachten — dat is hoe een dode playknop eruitziet. Een
+  leeg VAST-antwoord betekent "geen advertentie" en de speler loopt door naar
+  de video. Werkt voor zowel `fetch` als `XMLHttpRequest`, en alleen nadat een
+  verzoek echt is mislukt.
+* Antwoord past zich aan het verzoek aan: VAST-XML voor advertentietags, `{}`
+  voor JSON, verder leeg.
+* `#veryanti=panel` toont het logboek op de pagina zelf, voor telefoons waar
+  geen console te openen is. Dubbeltik om het venster te sluiten.
+
 ## 1.5.0
 
 * De player kan niet langer sneuvelen bij het opruimen. Zit de muur *om* de

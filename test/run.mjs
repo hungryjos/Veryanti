@@ -47,6 +47,7 @@ async function run({ withScript, query = '' }) {
     // The fixture probes a real ad host; block it so the request fails the
     // same way an adblocker would make it fail.
     await page.route('**://*.googlesyndication.com/**', (route) => route.abort());
+    await page.route('**://*.exoclick.com/**', (route) => route.abort());
 
     await page.goto(SITE + query);
     await page.waitForTimeout(1500);
@@ -57,6 +58,7 @@ async function run({ withScript, query = '' }) {
         nagBar: !!document.getElementById('topbar'),
         contentIntact: !!document.getElementById('content'),
         scrollLocked: getComputedStyle(document.body).overflow === 'hidden',
+        playbackStarted: window.__results.playbackStarted === true,
         playerPresent: !!document.getElementById('player'),
         playerHidden: (() => {
             const player = document.getElementById('player');
@@ -85,6 +87,7 @@ function report(label, state) {
     console.log(`  content intact  : ${state.contentIntact}`);
     console.log(`  scroll locked   : ${state.scrollLocked}`);
     console.log(`  player hidden   : ${state.playerHidden}`);
+    console.log(`  playback started: ${state.playbackStarted}`);
     if (state.layers) {
         console.log(`  layers active   : ${state.layers.installed.join(', ')}`);
         for (const failure of state.layers.failed) {
@@ -99,6 +102,9 @@ const baseline = await run({ withScript: false });
 report('without Veryanti (expect a wall)', baseline);
 if (!baseline.overlay) failures.push('fixture did not raise a wall without the script');
 if (!baseline.nagBar) failures.push('fixture lost its nag bar without the script');
+if (baseline.playbackStarted) {
+    failures.push('fixture started playback without the script, so the preroll test proves nothing');
+}
 
 const patched = await run({ withScript: true });
 report('with Veryanti (expect no wall)', patched);
@@ -109,6 +115,9 @@ if (patched.overlay) failures.push('overlay was not removed');
 if (patched.nagBar) failures.push('nag bar was not removed');
 if (!patched.contentIntact) failures.push('page content was removed along with the nagging');
 if (patched.scrollLocked) failures.push('scrolling is still locked');
+if (!patched.playbackStarted) {
+    failures.push('the blocked preroll was not answered, so playback never started');
+}
 // Every layer must actually install: a layer that throws at boot used to go
 // unnoticed because the other layers hid the symptom.
 for (const failure of patched.layers?.failed ?? []) {

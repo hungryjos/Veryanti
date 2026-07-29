@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Veryanti
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.5.0
+// @version      1.6.0
 // @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes nag overlays and restores page scrolling.
 // @author       hungryjos
 // @license      MIT
@@ -55,6 +55,9 @@
     const CONFIG = {
         /** Log everything Veryanti does to the console. Turn on when tuning. */
         debug: false,
+
+        /** Also show that log on the page itself — for phones. */
+        panel: false,
 
         /** Make hidden ad-bait elements report a non-zero size. */
         fakeBaitVisibility: true,
@@ -137,16 +140,55 @@
     // Small helpers
     // =====================================================================
 
-    const VERSION = '1.5.0';
+    const VERSION = '1.6.0';
     const win = window;
     const doc = document;
     const TAG = '%c[Veryanti]';
     const TAG_STYLE = 'color:#8ab4f8;font-weight:bold';
 
+    // With #veryanti=panel the log lands on the page as well. A phone has no
+    // console, so this is the only way to see what the script is doing.
+    const panelLines = [];
+    let panelNode = null;
+
+    function renderPanel() {
+        if (!settings.panel || !doc.body) return;
+        if (!panelNode) {
+            panelNode = doc.createElement('div');
+            panelNode.id = 'veryanti-panel';
+            panelNode.style.cssText = [
+                'position:fixed', 'left:4px', 'right:4px', 'bottom:4px',
+                'max-height:38vh', 'overflow:auto', 'z-index:2147483647',
+                'background:rgba(0,0,0,.88)', 'color:#8ab4f8',
+                'font:11px/1.4 ui-monospace,Menlo,monospace', 'padding:6px 8px',
+                'border-radius:8px', 'white-space:pre-wrap', 'word-break:break-all',
+            ].join(';');
+            panelNode.addEventListener('dblclick', () => panelNode.remove());
+            doc.body.appendChild(panelNode);
+        }
+        panelNode.textContent = 'Veryanti v' + VERSION +
+            ' (dubbeltik om te sluiten)\n' + panelLines.join('\n');
+    }
+
+    function toPanel(args) {
+        if (!settings.panel) return;
+        panelLines.push(args.map((a) => {
+            if (typeof a === 'string') return a;
+            try { return JSON.stringify(a); } catch (e) { return String(a); }
+        }).join(' '));
+        if (panelLines.length > 60) panelLines.shift();
+        renderPanel();
+    }
+
     const log = (...args) => {
-        if (settings.debug) console.log(TAG, TAG_STYLE, ...args);
+        if (!settings.debug) return;
+        console.log(TAG, TAG_STYLE, ...args);
+        toPanel(args);
     };
-    const warn = (...args) => console.warn(TAG, TAG_STYLE, ...args);
+    const warn = (...args) => {
+        console.warn(TAG, TAG_STYLE, ...args);
+        toPanel(['WARN'].concat(args));
+    };
 
     /** Resolve the rules for the current host. */
     function resolveRules() {
@@ -186,6 +228,7 @@
     for (const item of switches) {
         if (!item) continue;
         if (item === 'debug') settings.debug = true;
+        else if (item === 'panel') { settings.debug = true; settings.panel = true; }
         else if (item.charAt(0) === '-') settings[item.slice(1)] = false;
         else if (item.charAt(0) === '+') settings[item.slice(1)] = true;
     }
@@ -462,6 +505,23 @@
         return typeof url === 'string' && url.length > 0 && AD_PROBE_RE.test(url);
     }
 
+    /**
+     * What a blocked ad request should have answered. A video player asking
+     * for a preroll needs a well-formed "no ad here" reply; an empty body
+     * leaves it waiting, and a waiting player never starts the video.
+     */
+    const EMPTY_VAST = '<?xml version="1.0" encoding="UTF-8"?><VAST version="3.0"></VAST>';
+
+    function emptyAdResponse(url) {
+        if (/vast|vpaid|vmap|\.xml|ad_?tag|zoneid/i.test(url)) {
+            return { text: EMPTY_VAST, type: 'text/xml' };
+        }
+        if (/\.json|json=|callback=/i.test(url)) {
+            return { text: '{}', type: 'application/json' };
+        }
+        return { text: '', type: 'text/plain' };
+    }
+
     /** Rewrite src on script/img elements before the request is even made. */
     function patchSrcSetter(proto, replacement, label) {
         if (!proto) return;
@@ -499,38 +559,78 @@
             return nativeSetAttribute.call(this, name, value);
         };
 
-        // fetch(): a blocked probe resolves as a boring 200 instead of
-        // throwing. Restricted to third-party ad hosts — faking a response
-        // to one of the site's own requests would break the site.
+        // fetch(): rescue a request the blocker killed. Only after it has
+        // actually failed — pre-empting a request that would have succeeded
+        // is how you break the site instead of the wall.
         if (nativeFetch) {
             win.fetch = function (input, init) {
                 const url = typeof input === 'string' ? input
                           : (input && input.url) || '';
                 const promise = nativeFetch(input, init);
-                if (!AD_HOST_RE.test(url)) return promise;
+                if (!isAdProbe(url)) return promise;
                 return promise.catch(() => {
-                    log('probe faked (fetch):', url);
-                    return new Response('', {
+                    const body = emptyAdResponse(url);
+                    log('probe rescued (fetch):', url);
+                    return new Response(body.text, {
                         status: 200,
                         statusText: 'OK',
-                        headers: { 'Content-Type': 'text/plain' },
+                        headers: { 'Content-Type': body.type },
                     });
                 });
             };
         }
 
-        // XMLHttpRequest: point the probe at a harmless same-origin resource
-        // so the detector sees status 200 instead of a network error. Only
-        // for third-party ad hosts: diverting one of the site's own requests
-        // hands the player a page of HTML where it expects data.
+        // XMLHttpRequest: same idea. A player that asks for a preroll and
+        // gets a network error waits forever, which is what leaves the play
+        // button dead. An empty VAST answer means "no ad" and it moves on.
         if (win.XMLHttpRequest) {
             const nativeXhrOpen = win.XMLHttpRequest.prototype.open;
+            const nativeXhrSend = win.XMLHttpRequest.prototype.send;
+
             win.XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-                if (AD_HOST_RE.test(String(url))) {
-                    log('probe redirected (xhr):', url);
-                    return nativeXhrOpen.call(this, method, location.href, ...rest);
-                }
+                this.__veryantiUrl = String(url);
                 return nativeXhrOpen.call(this, method, url, ...rest);
+            };
+
+            win.XMLHttpRequest.prototype.send = function (...args) {
+                const xhr = this;
+                const url = xhr.__veryantiUrl || '';
+                if (isAdProbe(url)) {
+                    let rescued = false;
+                    const rescue = () => {
+                        if (rescued) return;
+                        rescued = true;
+                        const body = emptyAdResponse(url);
+                        const shadow = {
+                            readyState: 4,
+                            status: 200,
+                            statusText: 'OK',
+                            responseText: body.text,
+                            response: body.text,
+                            responseURL: url,
+                        };
+                        for (const key of Object.keys(shadow)) {
+                            try {
+                                Object.defineProperty(xhr, key, {
+                                    configurable: true,
+                                    get: () => shadow[key],
+                                });
+                            } catch (e) { /* keep going */ }
+                        }
+                        log('probe rescued (xhr):', url);
+                        for (const type of ['readystatechange', 'load', 'loadend']) {
+                            try { xhr.dispatchEvent(new Event(type)); } catch (e) { /* ignore */ }
+                        }
+                    };
+                    xhr.addEventListener('error', rescue);
+                    xhr.addEventListener('timeout', rescue);
+                    xhr.addEventListener('abort', rescue);
+                    // A blocker often answers with an instant status 0 "load".
+                    xhr.addEventListener('load', () => {
+                        if (xhr.status === 0) rescue();
+                    });
+                }
+                return nativeXhrSend.apply(xhr, args);
             };
         }
 
@@ -968,6 +1068,10 @@
             doc.documentElement.setAttribute('data-veryanti', VERSION);
         } catch (e) { /* ignore */ }
     });
+
+    // Lines logged before <body> existed still have to reach the panel.
+    doc.addEventListener('DOMContentLoaded', renderPanel);
+    win.addEventListener('load', renderPanel);
 
     console.info(TAG, TAG_STYLE, 'v' + VERSION + ' on ' + location.hostname +
         (disabledFromUrl ? ' - switched off from the URL' : '') +
