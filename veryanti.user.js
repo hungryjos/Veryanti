@@ -2,26 +2,27 @@
 // @name         Veryanti — anti-adblock neutralizer
 // @name:nl      Veryanti — anti-adblock neutralisator
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.1.0
+// @version      1.1.1
 // @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes "disable your adblocker" overlays and restores page scrolling.
 // @description:nl  Schakelt anti-adblock muren uit: maakt lokaas-elementen "zichtbaar", vervangt detectie-bibliotheken, spooft geblokkeerde ad-requests, verwijdert "zet je adblocker uit"-overlays en herstelt het scrollen.
 // @author       hungryjos
 // @license      MIT
 // @homepageURL  https://github.com/hungryjos/Veryanti
 // @supportURL   https://github.com/hungryjos/Veryanti/issues
-//
-// --- Sites where this script runs. Add your own lines here. ---------------
 // @match        *://xadultflix.com/*
+// @match        *://www.xadultflix.com/*
 // @match        *://*.xadultflix.com/*
-// @include      /^https?:\/\/([a-z0-9-]+\.)*xadultflix\.[a-z.]+\//
-// -------------------------------------------------------------------------
-// To run everywhere instead, replace the block above with:  @match *://*/*
-//
 // @run-at       document-start
 // @grant        none
 // ==/UserScript==
 
 /*
+ * Adding sites: put one more "// @match *://example.com/*" line in the block
+ * above, inside the ==UserScript== markers. Keep every line in that block a
+ * plain "// @key value" pair — prose or decoration between the markers is
+ * what makes a script manager skip the script entirely.
+ * To run on every site, use a single match line for all hosts instead.
+ *
  * Veryanti runs in the page context (@grant none) so it can replace page
  * globals before the site's own scripts touch them. Everything is layered:
  * each defence is independent, so one failing technique does not disable
@@ -131,6 +132,7 @@
     // Small helpers
     // =====================================================================
 
+    const VERSION = '1.1.1';
     const win = window;
     const doc = document;
     const TAG = '%c[Veryanti]';
@@ -846,7 +848,7 @@
         Object.defineProperty(win, '__veryanti', {
             configurable: true,
             value: {
-                version: '1.1.0',
+                version: VERSION,
                 settings,
                 installed,
                 failed,
@@ -857,5 +859,20 @@
         });
     } catch (e) { /* ignore */ }
 
-    log('active on', location.hostname, settings);
+    // Proof of life, on purpose not behind the debug flag: one line in the
+    // console, plus a marker on <html>. The marker survives even when a
+    // script manager has to sandbox the script — in that case the console
+    // sees data-veryanti but window.__veryanti stays undefined, which tells
+    // you exactly what went wrong.
+    whenDocumentElement(() => {
+        try {
+            doc.documentElement.setAttribute('data-veryanti', VERSION);
+        } catch (e) { /* ignore */ }
+    });
+
+    console.info(TAG, TAG_STYLE, 'v' + VERSION + ' on ' + location.hostname +
+        ' — active: ' + (installed.join(', ') || 'nothing') +
+        (failed.length ? ' — failed: ' + failed.map((f) => f.layer).join(', ') : ''));
+
+    log('settings', settings);
 })();

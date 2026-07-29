@@ -27,14 +27,15 @@ Bovenaan het script staat het `@match`-blok:
 ```
 
 Voeg per site een regel toe, bijvoorbeeld `// @match *://voorbeeld.com/*`.
-Wil je het overal laten draaien, vervang het hele blok dan door:
+Wil je het overal laten draaien, vervang het hele blok dan door één regel die
+alle hosts dekt. Dat werkt breed, maar kan op sommige sites layout- of
+playerlogica raken — zie *Als iets stukgaat* hieronder.
 
-```js
-// @match        *://*/*
-```
-
-Dat werkt breed, maar kan op sommige sites layout- of playerlogica raken —
-zie *Als iets stukgaat* hieronder.
+> **Let op:** elke regel tussen `// ==UserScript==` en `// ==/UserScript==`
+> moet een `// @sleutel waarde`-paar zijn. Zet er geen uitleg, streepjeslijn
+> of lege `//`-regel tussen: strenge parsers stoppen daar met lezen, waardoor
+> je `@match`-regels wegvallen en het script nergens meer draait. `npm test`
+> controleert dit.
 
 ## Hoe het werkt
 
@@ -82,8 +83,24 @@ __veryanti.installed   // lagen die draaien
 __veryanti.failed      // lagen die bij het opstarten stukliepen
 ```
 
-Bestaat `window.__veryanti` niet, dan draait het script helemaal niet op die
-pagina — controleer je `@match`-regels en of het script aanstaat in je manager.
+## Draait het wel?
+
+Bij elke pagina zet Veryanti één regel in de console:
+
+```
+[Veryanti] v1.1.1 on xadultflix.com — active: fakeBaitVisibility, stubDetectors, …
+```
+
+Zie je die niet, controleer dan in de console (F12) deze twee dingen:
+
+| `document.documentElement.dataset.veryanti` | `window.__veryanti` | Wat is er aan de hand |
+| --- | --- | --- |
+| versienummer | object | Alles in orde. |
+| versienummer | `undefined` | Je manager draait het script in een sandbox (meestal door de CSP van de site). De DOM-opruiming werkt dan nog, maar het onderscheppen van paginacode niet. Violentmonkey heeft hier minder last van dan Tampermonkey. |
+| `undefined` | `undefined` | Het script start niet. Klopt de host in je `@match`? Staat het script aan in het dashboard? Draait je manager in privévensters? En: staat er geen losse tekstregel in het metadatablok (zie hierboven)? |
+
+Verschijnt er wel een regel maar staan er lagen achter `failed:`, stuur die
+melding dan door — dan weet ik precies welke laag klapt.
 
 ## Als iets stukgaat
 

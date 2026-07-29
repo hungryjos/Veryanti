@@ -5,7 +5,9 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "node test/run.mjs",
+    "test": "node test/meta.mjs && node test/run.mjs",
+    "test:meta": "node test/meta.mjs",
+    "test:browser": "node test/run.mjs",
     "lint": "node --check veryanti.user.js"
   }
 }
