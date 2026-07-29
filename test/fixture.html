@@ -137,6 +137,21 @@
     record('slot-render', window.__results.adRendered !== true);
   }, 400);
 
+  // 12. A homegrown detector that calls the global as a plain function.
+  //     Handing it an object throws and takes the rest of the file with it.
+  window.__results.detectorCallable = false;
+  try {
+    var blocked = window.detectAdBlock(function (isBlocked) {
+      if (isBlocked === true) window.__results.detectorSaidBlocked = true;
+    });
+    window.__results.detectorCallable = true;
+    record('detect-adblock-fn',
+           blocked === true || window.__results.detectorSaidBlocked === true);
+  } catch (e) {
+    // Exactly what happens on the real site: the detector file dies here.
+    record('detect-adblock-fn', true);
+  }
+
   // 7. Timer that keeps re-showing the wall.
   setInterval(function adblockWatchdog() {
     if (!document.getElementById('adblock-overlay')) showWall();

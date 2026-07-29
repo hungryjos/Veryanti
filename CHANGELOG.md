@@ -3,6 +3,19 @@
 De versie bovenaan dit bestand moet gelijk zijn aan `@version` in
 `veryanti.user.js` — `npm test` controleert dat.
 
+## 1.9.1
+
+* Opgelost: de stand-in voor `detectAdBlock` was een object, terwijl de site
+  hem als functie aanroept. Dat gooide `TypeError: detectAdBlock is not a
+  function` en nam de rest van `ads-detector.js` mee — mijn eigen stand-in
+  brak dus precies de code die hij moest misleiden. De stand-ins zijn nu
+  aanroepbare functies die "geen blocker" antwoorden: `false` aan de
+  aanroeper en `false` aan een eventuele callback, met de FuckAdBlock-methoden
+  er nog steeds op.
+* `video.xadultflix.com` staat nu expliciet in de matchregels. De speler
+  draait in een iframe op dat subdomein.
+* Het logvenster verschijnt alleen nog in de hoofdpagina, niet in frames.
+
 ## 1.9.0
 
 Diagnostiek, alleen actief met `#veryanti=debug` of `#veryanti=panel`. Het

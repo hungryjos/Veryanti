@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Veryanti
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.9.0
+// @version      1.9.1
 // @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes nag overlays and restores page scrolling.
 // @author       hungryjos
 // @license      MIT
@@ -15,6 +15,8 @@
 // @match        https://xadultflix.com/*
 // @match        https://www.xadultflix.com/*
 // @match        https://*.xadultflix.com/*
+// @match        *://video.xadultflix.com/*
+// @match        https://video.xadultflix.com/*
 // @include      https://xadultflix.com/*
 // @include      https://*.xadultflix.com/*
 // @run-at       document-start
@@ -147,7 +149,7 @@
     // Small helpers
     // =====================================================================
 
-    const VERSION = '1.9.0';
+    const VERSION = '1.9.1';
     const win = window;
     const doc = document;
     const TAG = '%c[Veryanti]';
@@ -160,6 +162,8 @@
 
     function renderPanel() {
         if (!settings.panel || !doc.body) return;
+        // Inside a frame the panel would be hidden in a corner of the player.
+        try { if (win !== win.top) return; } catch (e) { return; }
         if (!panelNode) {
             panelNode = doc.createElement('div');
             panelNode.id = 'veryanti-panel';
@@ -641,9 +645,37 @@
         log('ad SDK stubs installed');
     }
 
+    /**
+     * Homegrown detectors call the global as a plain function —
+     * detectAdBlock(), sometimes with a callback. Handing them an object
+     * throws a TypeError and kills the rest of that file, so the stand-in is
+     * a function that carries the FuckAdBlock methods and answers "no
+     * blocker": false to the caller, false to any callback.
+     */
+    function makeCallableInstance(Stub) {
+        const instance = new Stub();
+        const callable = function (...args) {
+            for (const arg of args) {
+                if (typeof arg !== 'function') continue;
+                try { arg(false); } catch (e) { /* ignore */ }
+            }
+            log('answered a detector call with "no blocker"');
+            return false;
+        };
+        ['setOption', 'on', 'onDetected', 'onNotDetected', 'emitEvent',
+         'clearEvent', 'check'].forEach((name) => {
+            if (typeof instance[name] === 'function') {
+                callable[name] = instance[name].bind(instance);
+            }
+        });
+        callable.detected = false;
+        callable.isBlocking = false;
+        return callable;
+    }
+
     function installDetectorStubs() {
         const Stub = makeFuckAdBlockStub();
-        const instance = new Stub();
+        const instance = makeCallableInstance(Stub);
 
         ['FuckAdBlock', 'BlockAdBlock', 'DetectAdBlock', 'AdBlockDetector',
          'AdBlocker', 'SniffAdBlock'].forEach((name) => lockGlobal(name, Stub));
