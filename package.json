@@ -1,0 +1,11 @@
+{
+  "name": "veryanti",
+  "version": "1.0.0",
+  "description": "Userscript that neutralises anti-adblock walls",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node test/run.mjs",
+    "lint": "node --check veryanti.user.js"
+  }
+}

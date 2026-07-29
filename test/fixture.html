@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Anti-adblock test fixture</title>
+<style>
+  /* Simulates what a blocker's filter list does to bait elements. */
+  .ad-banner, #ad-slot-top, ins.adsbygoogle { display: none !important; }
+
+  body.modal-open { overflow: hidden; }
+  #adblock-overlay {
+    position: fixed; inset: 0; z-index: 99999;
+    background: rgba(0, 0, 0, .95); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #content { height: 4000px; }
+</style>
+</head>
+<body>
+  <div class="ad-banner">ad</div>
+  <div id="ad-slot-top">ad</div>
+  <ins class="adsbygoogle"></ins>
+  <div id="player">video player</div>
+  <div id="content">page content</div>
+
+<script>
+  window.__results = { checks: [] };
+
+  function record(name, blockedDetected) {
+    window.__results.checks.push({ name: name, detected: blockedDetected });
+    if (blockedDetected) showWall();
+  }
+
+  function showWall() {
+    if (document.getElementById('adblock-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'adblock-overlay';
+    overlay.textContent = 'Please disable your AdBlocker to continue watching.';
+    document.body.appendChild(overlay);
+    document.body.classList.add('modal-open');
+    document.getElementById('player').style.display = 'none';
+  }
+
+  // 1. Bait element size check.
+  record('bait-size', document.querySelector('.ad-banner').offsetHeight === 0);
+
+  // 2. Computed style check.
+  record('computed-style',
+         getComputedStyle(document.getElementById('ad-slot-top')).display === 'none');
+
+  // 3. Bounding rect check.
+  record('bounding-rect',
+         document.querySelector('ins.adsbygoogle').getBoundingClientRect().height === 0);
+
+  // 4. Global flag set by an ad script that never loads.
+  record('can-run-ads', window.canRunAds !== true);
+
+  // 5. FuckAdBlock style library (loaded by the page, must be neutralised).
+  window.FuckAdBlock = window.FuckAdBlock || function FuckAdBlock() {
+    this.onDetected = function (fn) { setTimeout(fn, 0); return this; };
+    this.onNotDetected = function () { return this; };
+    this.check = function () { return true; };
+  };
+  const fab = new window.FuckAdBlock();
+  fab.onDetected(function () { record('fuckadblock', true); });
+  fab.onNotDetected(function () { record('fuckadblock', false); });
+  fab.check();
+
+  // 6. Script probe: onerror means the request was blocked.
+  const probe = document.createElement('script');
+  probe.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js';
+  probe.onerror = function () { record('script-probe', true); };
+  probe.onload = function () { record('script-probe', false); };
+  document.head.appendChild(probe);
+
+  // 7. Timer that keeps re-showing the wall.
+  setInterval(function adblockWatchdog() {
+    if (!document.getElementById('adblock-overlay')) showWall();
+  }, 200);
+</script>
+</body>
+</html>
