@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Veryanti
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.8.0
+// @version      1.9.0
 // @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes nag overlays and restores page scrolling.
 // @author       hungryjos
 // @license      MIT
@@ -147,7 +147,7 @@
     // Small helpers
     // =====================================================================
 
-    const VERSION = '1.8.0';
+    const VERSION = '1.9.0';
     const win = window;
     const doc = document;
     const TAG = '%c[Veryanti]';
@@ -476,8 +476,14 @@
      * whose script never loaded, so page code calling into it does not throw
      * and take the rest of its function down with it.
      */
-    function makeSilentStub() {
+    function makeSilentStub(name) {
         const noop = function () { return stub; };
+        let noted = 0;
+        const note = (what) => {
+            if (!settings.debug || noted >= 25) return;
+            noted++;
+            log('ad SDK: ' + name + what);
+        };
         const stub = new Proxy(noop, {
             get(target, prop) {
                 if (prop === 'then' || prop === Symbol.toStringTag) return undefined;
@@ -485,11 +491,12 @@
                 if (prop === 'length') return 0;
                 if (prop === 'valueOf') return () => '';
                 if (prop === 'toString') return () => '';
+                if (typeof prop === 'string') note('.' + prop + ' read');
                 return stub;
             },
             set() { return true; },
-            apply() { return stub; },
-            construct() { return stub; },
+            apply() { note('() called'); return stub; },
+            construct() { note(' constructed'); return stub; },
             has() { return true; },
         });
         return stub;
@@ -505,7 +512,15 @@
         const queue = [];
         queue.push = function (...entries) {
             for (const entry of entries) {
-                if (typeof entry !== 'function') continue;
+                if (typeof entry !== 'function') {
+                    // ExoClick and friends push configuration objects, not
+                    // callbacks. Nothing to run, but worth seeing in the log.
+                    let shown = '';
+                    try { shown = JSON.stringify(entry).slice(0, 80); }
+                    catch (e) { shown = String(entry); }
+                    log(label + ' received: ' + shown);
+                    continue;
+                }
                 try {
                     entry();
                     log('ran a queued callback from ' + label);
@@ -613,11 +628,11 @@
         });
 
         // ExoClick and the popunder libraries common on tube sites.
-        lockGlobal('ExoLoader', silent);
-        lockGlobal('ExoSense', silent);
-        lockGlobal('popMagic', silent);
-        lockGlobal('popns', silent);
-        lockGlobal('TrafficJunky', silent);
+        lockGlobal('ExoLoader', makeSilentStub('ExoLoader'));
+        lockGlobal('ExoSense', makeSilentStub('ExoSense'));
+        lockGlobal('popMagic', makeSilentStub('popMagic'));
+        lockGlobal('popns', makeSilentStub('popns'));
+        lockGlobal('TrafficJunky', makeSilentStub('TrafficJunky'));
 
         if (!Array.isArray(win.AdProvider)) {
             lockGlobal('AdProvider', makeRunningQueue('AdProvider'));
@@ -1148,6 +1163,60 @@
     }
 
     // =====================================================================
+    // Diagnostics — only with #veryanti=debug or #veryanti=panel
+    // =====================================================================
+
+    /**
+     * The panel otherwise only shows what happens while the page loads. When
+     * a play button does nothing, what matters is what happens when you tap
+     * it: which element you hit, and what threw afterwards.
+     */
+    function installDiagnostics() {
+        win.addEventListener('error', (event) => {
+            const file = event.filename
+                ? ' @ ' + String(event.filename).split('/').pop() + ':' + event.lineno
+                : '';
+            log('page error: ' + (event.message || String(event.error)) + file);
+        }, true);
+
+        win.addEventListener('unhandledrejection', (event) => {
+            const reason = event.reason;
+            log('unhandled rejection: ' +
+                String((reason && reason.message) || reason));
+        });
+
+        doc.addEventListener('click', (event) => {
+            const el = event.target;
+            if (!el || el.nodeType !== 1) return;
+            let cls = el.className;
+            if (typeof cls !== 'string') cls = '';
+            log('tap on ' + el.tagName +
+                (el.id ? '#' + el.id : '') +
+                (cls ? '.' + cls.trim().split(/\s+/).slice(0, 3).join('.') : ''));
+        }, true);
+
+        // A player inside a third-party frame runs where this script does
+        // not, unless that host is in the @match list.
+        const listFrames = () => {
+            const frames = doc.querySelectorAll('iframe');
+            if (!frames.length) {
+                log('no iframes on this page');
+                return;
+            }
+            Array.prototype.slice.call(frames, 0, 8).forEach((frame, index) => {
+                let host = '(no src)';
+                try {
+                    if (frame.src) host = new URL(frame.src, location.href).host;
+                } catch (e) { host = String(frame.src).slice(0, 40); }
+                log('iframe ' + (index + 1) + ': ' + host);
+            });
+        };
+        win.addEventListener('load', () => nativeSetTimeout(listFrames, 800));
+
+        log('diagnostics installed');
+    }
+
+    // =====================================================================
     // 6. Popup / popunder guard
     // =====================================================================
 
@@ -1189,6 +1258,7 @@
         ['filterTimers', installTimerFilter],
         ['cleanDom', installDomCleanup],
         ['blockPopups', installPopupGuard],
+        ['debug', installDiagnostics],
     ];
 
     const installed = [];

@@ -3,6 +3,22 @@
 De versie bovenaan dit bestand moet gelijk zijn aan `@version` in
 `veryanti.user.js` — `npm test` controleert dat.
 
+## 1.9.0
+
+Diagnostiek, alleen actief met `#veryanti=debug` of `#veryanti=panel`. Het
+paneel toonde tot nu toe enkel wat er tijdens het laden gebeurt, terwijl het
+probleem zich voordoet op het moment dat je tikt.
+
+* Foutmeldingen van de pagina en afgewezen beloftes komen in het paneel, met
+  bestand en regelnummer.
+* Elke tik wordt gelogd met het element dat geraakt werd, zodat zichtbaar is
+  of de tik überhaupt ergens aankomt.
+* Aanroepen naar de nagebootste advertentie-SDK's worden gelogd, dus je ziet
+  wat de pagina precies van ExoClick verwacht.
+* De iframes op de pagina worden opgesomd. Staat de speler in een iframe van
+  een ander domein, dan draait dit script daar niet — dat vraagt een extra
+  `@match`-regel voor die host.
+
 ## 1.8.0
 
 * De nabootsing meldt nu ook dat er daadwerkelijk een advertentie is
