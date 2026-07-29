@@ -172,6 +172,23 @@ Zie je die niet, controleer dan in de console (F12) deze twee dingen:
 Verschijnt er wel een regel maar staan er lagen achter `failed:`, stuur die
 melding dan door — dan weet ik precies welke laag klapt.
 
+## Snel uitproberen via de URL
+
+Op een telefoon is het script niet even bewerken. Daarom kun je lagen vanuit de
+adresbalk uitzetten — handig om te bepalen of een probleem van de site komt of
+van Veryanti:
+
+| Achter de URL plakken | Effect |
+| --- | --- |
+| `#veryanti=off` | Alles uit. Blijft het probleem, dan ligt het niet aan dit script. |
+| `#veryanti=-filterTimers` | Alleen die laag uit. Elke sleutel uit `CONFIG` werkt. |
+| `#veryanti=debug` | Logging aan in de console. |
+| `#veryanti=debug,-blockPopups` | Combineren met komma's. |
+
+Speelt een video niet, begin dan met `#veryanti=off`. Speelt hij dan wél, loop
+de lagen af met `-filterTimers`, `-spoofAdProbes`, `-fakeBaitVisibility` en
+`-cleanDom` tot je weet welke het is, en laat het me weten.
+
 ## Als iets stukgaat
 
 Zet de lagen één voor één uit in `CONFIG` om te zien welke de boosdoener is:

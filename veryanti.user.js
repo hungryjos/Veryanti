@@ -1,10 +1,8 @@
 // ==UserScript==
-// @name         Veryanti — anti-adblock neutralizer
-// @name:nl      Veryanti — anti-adblock neutralisator
+// @name         Veryanti
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.4.0
-// @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes "disable your adblocker" overlays and restores page scrolling.
-// @description:nl  Schakelt anti-adblock muren uit: maakt lokaas-elementen "zichtbaar", vervangt detectie-bibliotheken, spooft geblokkeerde ad-requests, verwijdert "zet je adblocker uit"-overlays en herstelt het scrollen.
+// @version      1.5.0
+// @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes nag overlays and restores page scrolling.
 // @author       hungryjos
 // @license      MIT
 // @homepageURL  https://github.com/hungryjos/Veryanti
@@ -139,7 +137,7 @@
     // Small helpers
     // =====================================================================
 
-    const VERSION = '1.4.0';
+    const VERSION = '1.5.0';
     const win = window;
     const doc = document;
     const TAG = '%c[Veryanti]';
@@ -160,9 +158,38 @@
         return SITE_RULES['*'];
     }
 
+    /**
+     * Switches you can set from the address bar, which is the only practical
+     * way to try things on a phone:
+     *
+     *   ...xadultflix.com/#veryanti=off             everything off
+     *   ...xadultflix.com/#veryanti=-filterTimers   that one layer off
+     *   ...xadultflix.com/#veryanti=debug           log what it does
+     *
+     * Combine with commas. Layer names are the keys of CONFIG.
+     */
+    function readUrlSwitches() {
+        const match = /veryanti=([^&\s#]+)/i.exec(location.search + location.hash);
+        if (!match) return [];
+        try {
+            return decodeURIComponent(match[1]).split(',').map((s) => s.trim());
+        } catch (e) {
+            return match[1].split(',').map((s) => s.trim());
+        }
+    }
+
     const rules = resolveRules();
     const fallback = SITE_RULES['*'];
     const settings = Object.assign({}, CONFIG, rules.options || {});
+
+    const switches = readUrlSwitches();
+    for (const item of switches) {
+        if (!item) continue;
+        if (item === 'debug') settings.debug = true;
+        else if (item.charAt(0) === '-') settings[item.slice(1)] = false;
+        else if (item.charAt(0) === '+') settings[item.slice(1)] = true;
+    }
+    const disabledFromUrl = switches.includes('off');
     const removeSelectors = []
         .concat(fallback.remove || [], rules === fallback ? [] : rules.remove || []);
     const unhideSelectors = []
@@ -175,23 +202,45 @@
     const nativeOpen = win.open ? win.open.bind(win) : null;
     const nativeFetch = win.fetch ? win.fetch.bind(win) : null;
 
-    /** Things that look like an ad container to a detector script. */
-    const BAIT_RE = new RegExp([
-        'ad[_-]?(s|v|vert|verts|vertis(e|ing|ement)s?|box|unit|slot|frame|wrap|holder|zone|space|banner|block|label|container)?\\b',
+    /**
+     * Things that look like an ad container to a detector script.
+     *
+     * The ad words have to stand on their own: "-" and "_" count as edges,
+     * letters and digits do not. Without that, "ad" matches the tail of
+     * "load", "upload" and "lazyload", and half the player markup gets
+     * treated as bait.
+     */
+    const EDGE_BEFORE = '(?:^|[^a-z0-9])';
+    const EDGE_AFTER = '(?:$|[^a-z0-9])';
+    const BAIT_RE = new RegExp(EDGE_BEFORE + '(?:' + [
+        'ads?', 'adv', 'advert(?:is(?:e|ing|ement)s?)?',
+        'ad(?:box|unit|slot|frame|wrap|holder|zone|space|banner|block|label|container)',
         'banner', 'sponsor', 'doubleclick', 'googlead', 'adsbygoogle',
-        'pub[_-]?\\d', 'popunder', 'pop[_-]?ads', 'adsterra', 'exoclick',
+        'pub[_-]?\\d+', 'popunder', 'pop[_-]?ads', 'adsterra', 'exoclick',
         'juicyads', 'trafficjunky', 'adnxs', 'taboola', 'outbrain',
+    ].join('|') + ')' + EDGE_AFTER, 'i');
+
+    /**
+     * Third-party ad hosts. Nothing the site itself needs comes from these,
+     * so a request to one can safely be faked or diverted.
+     */
+    const AD_HOST_RE = new RegExp([
+        'doubleclick\\.net', 'googlesyndication\\.com', 'googleadservices\\.com',
+        'adservice\\.google', 'amazon-adsystem\\.com', 'adnxs\\.com',
+        'criteo\\.', 'taboola\\.com', 'outbrain\\.com', 'exoclick\\.com',
+        'juicyads\\.com', 'popads\\.net', 'popcash\\.net', 'adsterra\\.com',
+        'trafficjunky\\.net', 'exdynsrv\\.com', 'realsrv\\.com',
     ].join('|'), 'i');
 
-    /** Hosts/paths a detector pings to see whether requests are blocked. */
+    /**
+     * Hosts plus the paths a detector pings to see whether requests get
+     * blocked. Only used for <script>/<img>, where a swapped source costs
+     * nothing; paths like "/banner" are too common to divert a data request.
+     */
     const AD_PROBE_RE = new RegExp([
-        'doubleclick\\.net', 'googlesyndication\\.com', 'googleadservices\\.com',
-        'google-analytics\\.com', 'adservice\\.google', 'amazon-adsystem\\.com',
-        'adnxs\\.com', 'criteo\\.', 'taboola\\.com', 'outbrain\\.com',
-        'exoclick\\.com', 'juicyads\\.com', 'popads\\.net', 'popcash\\.net',
-        'adsterra\\.com', 'trafficjunky\\.net', 'exdynsrv\\.com', 'realsrv\\.com',
-        '/ads?\\.js', '/ads?\\.php', '/adframe', '/advert', '/adsbygoogle',
-        '/prebid', '/pagead/', '/banner', 'analytics\\.js', 'gpt\\.js',
+        AD_HOST_RE.source,
+        '/ads?\\.js', '/ads?\\.php', '/adframe', '/adsbygoogle',
+        '/prebid', '/pagead/', 'gpt\\.js',
     ].join('|'), 'i');
 
     /** Wording used by nag screens, in a few languages. */
@@ -205,11 +254,15 @@
         'add\\s+us\\s+to\\s+your\\s+whitelist',
     ].join('|'), 'i');
 
-    /** Code fragments that indicate a detection callback. */
+    /**
+     * Code fragments that mean "this callback checks for an adblocker".
+     * Deliberately narrow: a player often mentions ads while doing the very
+     * work that starts the video, and dropping that timer stops playback.
+     */
     const DETECTION_CODE_RE = new RegExp([
-        'adblock', 'ad[_-]?block', 'blockadblock', 'fuckadblock',
-        'adsbygoogle', 'canRunAds', 'isAdBlock', 'detectAd', 'adBlockDetected',
-        'checkAdblock', 'showModal.*ad', 'popunder',
+        'ad[_-]?block', 'adblock', 'blockadblock', 'fuckadblock',
+        'canRunAds', 'canShowAds', 'isAdBlock', 'adBlockDetected',
+        'adsAreBlocked', 'detectAdBlock', 'checkAdblock',
     ].join('|'), 'i');
 
     /** Safe string signature of an element, for bait matching. */
@@ -446,13 +499,15 @@
             return nativeSetAttribute.call(this, name, value);
         };
 
-        // fetch(): a blocked probe resolves as a boring 200 instead of throwing.
+        // fetch(): a blocked probe resolves as a boring 200 instead of
+        // throwing. Restricted to third-party ad hosts — faking a response
+        // to one of the site's own requests would break the site.
         if (nativeFetch) {
             win.fetch = function (input, init) {
                 const url = typeof input === 'string' ? input
                           : (input && input.url) || '';
                 const promise = nativeFetch(input, init);
-                if (!isAdProbe(url)) return promise;
+                if (!AD_HOST_RE.test(url)) return promise;
                 return promise.catch(() => {
                     log('probe faked (fetch):', url);
                     return new Response('', {
@@ -465,11 +520,13 @@
         }
 
         // XMLHttpRequest: point the probe at a harmless same-origin resource
-        // so the detector sees status 200 instead of a network error.
+        // so the detector sees status 200 instead of a network error. Only
+        // for third-party ad hosts: diverting one of the site's own requests
+        // hands the player a page of HTML where it expects data.
         if (win.XMLHttpRequest) {
             const nativeXhrOpen = win.XMLHttpRequest.prototype.open;
             win.XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-                if (isAdProbe(String(url))) {
+                if (AD_HOST_RE.test(String(url))) {
                     log('probe redirected (xhr):', url);
                     return nativeXhrOpen.call(this, method, location.href, ...rest);
                 }
@@ -562,6 +619,10 @@
     function isNagScreen(el) {
         if (!el || el.nodeType !== 1 || !el.isConnected) return false;
         if (el === doc.body || el === doc.documentElement) return false;
+        // A wall wrapped around the player is still a wall, but removing the
+        // player with it leaves a page where nothing plays. Leave anything
+        // holding the video alone; the nag inside it is caught separately.
+        if (holdsProtectedContent(el)) return false;
 
         let style;
         try { style = nativeGetComputedStyle(el); } catch (e) { return false; }
@@ -589,6 +650,7 @@
         if (!body) return;
         for (const el of Array.from(body.children)) {
             if (el.nodeType !== 1 || el.tagName === 'SCRIPT') continue;
+            if (holdsProtectedContent(el)) continue;
             let style;
             try { style = nativeGetComputedStyle(el); } catch (e) { continue; }
             if (style.position !== 'fixed') continue;
@@ -649,6 +711,33 @@
             node = node.parentElement;
         }
         return candidate;
+    }
+
+    /**
+     * A wall built *around* the player cannot be deleted without taking the
+     * video with it. Strip what makes it a wall instead: it stops covering
+     * the page, and the player inside keeps working.
+     */
+    function defuseWallsAroundPlayer() {
+        let candidates;
+        try { candidates = doc.querySelectorAll(CANDIDATE_SELECTOR); }
+        catch (e) { return; }
+
+        candidates.forEach((el) => {
+            if (!holdsProtectedContent(el)) return;
+            let style;
+            try { style = nativeGetComputedStyle(el); } catch (e) { return; }
+            if (style.position !== 'fixed' && style.position !== 'absolute') return;
+            if (!isFullScreenLayer(el, style, el.getBoundingClientRect())) return;
+
+            const text = (el.innerText || el.textContent || '').slice(0, 3000);
+            if (!NAG_TEXT_RE.test(text) && !NAG_TEXT_RE.test(signature(el))) return;
+
+            el.style.setProperty('position', 'static', 'important');
+            el.style.setProperty('background', 'none', 'important');
+            el.style.setProperty('z-index', 'auto', 'important');
+            log('defused a wall around the player:', signature(el).trim());
+        });
     }
 
     /** Find adblock nagging by its wording, whatever the element is called. */
@@ -748,6 +837,8 @@
         });
         if (hit) removeBackdrops();
 
+        defuseWallsAroundPlayer();
+
         if (settings.textScan) scanForNagText();
 
         for (const selector of unhideSelectors) {
@@ -840,6 +931,7 @@
     const failed = [];
 
     for (const [flag, install] of steps) {
+        if (disabledFromUrl) break;
         if (!settings[flag]) continue;
         try {
             install();
@@ -878,8 +970,9 @@
     });
 
     console.info(TAG, TAG_STYLE, 'v' + VERSION + ' on ' + location.hostname +
-        ' — active: ' + (installed.join(', ') || 'nothing') +
-        (failed.length ? ' — failed: ' + failed.map((f) => f.layer).join(', ') : ''));
+        (disabledFromUrl ? ' - switched off from the URL' : '') +
+        ' - active: ' + (installed.join(', ') || 'nothing') +
+        (failed.length ? ' - failed: ' + failed.map((f) => f.layer).join(', ') : ''));
 
     log('settings', settings);
 })();

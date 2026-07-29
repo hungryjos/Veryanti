@@ -3,6 +3,28 @@
 De versie bovenaan dit bestand moet gelijk zijn aan `@version` in
 `veryanti.user.js` — `npm test` controleert dat.
 
+## 1.5.0
+
+* De player kan niet langer sneuvelen bij het opruimen. Zit de muur *om* de
+  player heen, dan wordt hij onschadelijk gemaakt (geen `position: fixed`,
+  geen achtergrond, geen z-index) in plaats van verwijderd.
+* Lokaasherkenning was te gulzig: `ad` matchte ook het staartje van `load`,
+  `upload` en `lazyload`, waardoor gewone spelerelementen als advertentie
+  werden behandeld. De ad-woorden moeten nu op zichzelf staan.
+* Het timerfilter is versmald tot echt adblock-specifieke code. Het liet
+  eerder ook callbacks vallen die enkel `adsbygoogle` of `popunder` noemen —
+  precies het soort functie waarin een tube-speler zijn preroll én het
+  starten van de video regelt.
+* `fetch` en `XMLHttpRequest` worden alleen nog omgeleid voor externe
+  advertentiehosts. Padpatronen als `/banner` waren te algemeen: een verzoek
+  van de site zelf kreeg zo een pagina HTML terug waar data werd verwacht.
+* Schakelaars via de URL, bedoeld voor telefoons waar je het script niet even
+  bewerkt: `#veryanti=off` zet alles uit, `#veryanti=-filterTimers` één laag,
+  `#veryanti=debug` zet logging aan. Meerdere achter elkaar met komma's.
+* Metadatablok versoberd: gewone ASCII-naam, geen `@name:nl` en
+  `@description:nl` meer. Sommige managers lezen die gelokaliseerde sleutels
+  niet en tonen het script dan zonder naam of versie.
+
 ## 1.4.0
 
 * Bredere matchregels: naast `*://` staan er nu ook expliciete `https://`

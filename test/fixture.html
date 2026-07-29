@@ -55,6 +55,20 @@
     document.addEventListener('DOMContentLoaded', showWall);
   }
 
+  // ?wrap=1 builds the wall *around* the player, which must be defused
+  // rather than removed: taking the wall away must not take the video.
+  if (location.search.indexOf('wrap') !== -1) {
+    document.addEventListener('DOMContentLoaded', function () {
+      var wall = document.createElement('div');
+      wall.className = 'blocker-modal';
+      wall.style.cssText =
+        'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:#000';
+      wall.innerHTML = '<p>Please disable your ad blocker to keep watching.</p>';
+      document.body.appendChild(wall);
+      wall.appendChild(document.getElementById('player'));
+    });
+  }
+
   // 1. Bait element size check.
   record('bait-size', document.querySelector('.ad-banner').offsetHeight === 0);
 

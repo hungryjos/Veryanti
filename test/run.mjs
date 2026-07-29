@@ -33,7 +33,7 @@ const scriptPath = join(here, '..', 'veryanti.user.js');
 const fixtureHtml = await readFile(join(here, 'fixture.html'), 'utf8');
 const SITE = 'https://xadultflix.com/';
 
-async function run({ withScript, forceWall }) {
+async function run({ withScript, query = '' }) {
     const browser = await chromium.launch();
     const page = await browser.newPage();
     if (withScript) await page.addInitScript({ path: scriptPath });
@@ -48,7 +48,7 @@ async function run({ withScript, forceWall }) {
     // same way an adblocker would make it fail.
     await page.route('**://*.googlesyndication.com/**', (route) => route.abort());
 
-    await page.goto(SITE + (forceWall ? '?wall=1' : ''));
+    await page.goto(SITE + query);
     await page.waitForTimeout(1500);
 
     const state = await page.evaluate(() => ({
@@ -57,7 +57,15 @@ async function run({ withScript, forceWall }) {
         nagBar: !!document.getElementById('topbar'),
         contentIntact: !!document.getElementById('content'),
         scrollLocked: getComputedStyle(document.body).overflow === 'hidden',
-        playerHidden: getComputedStyle(document.getElementById('player')).display === 'none',
+        playerPresent: !!document.getElementById('player'),
+        playerHidden: (() => {
+            const player = document.getElementById('player');
+            return player ? getComputedStyle(player).display === 'none' : true;
+        })(),
+        wallIsOverlay: (() => {
+            const wall = document.querySelector('.blocker-modal');
+            return wall ? getComputedStyle(wall).position === 'fixed' : false;
+        })(),
         layers: window.__veryanti
             ? { installed: window.__veryanti.installed, failed: window.__veryanti.failed }
             : null,
@@ -113,12 +121,29 @@ for (const layer of ['fakeBaitVisibility', 'stubDetectors', 'spoofAdProbes',
     }
 }
 
-const forced = await run({ withScript: true, forceWall: true });
+const forced = await run({ withScript: true, query: '?wall=1' });
 report('with Veryanti, wall forced open (DOM cleanup only)', forced);
 if (forced.overlay) failures.push('forced wall was not removed');
 if (forced.scrollLocked) failures.push('forced wall left scrolling locked');
 if (forced.playerHidden) failures.push('forced wall left the player hidden');
 if (!forced.contentIntact) failures.push('forced-wall cleanup removed page content');
+
+// A wall built around the player must lose its overlay styling, not take
+// the player down with it.
+const wrapped = await run({ withScript: true, query: '?wrap=1' });
+report('with Veryanti, wall wrapped around the player', wrapped);
+if (!wrapped.playerPresent) failures.push('the player was removed with the wall');
+if (wrapped.playerHidden) failures.push('the player stayed hidden inside the wall');
+if (wrapped.wallIsOverlay) failures.push('the wall around the player still covers the page');
+
+// The URL switch has to be able to turn everything off, or there is no way
+// to tell "the site blocks this" from "the script breaks this" on a phone.
+const switchedOff = await run({ withScript: true, query: '#veryanti=off' });
+report('with Veryanti switched off from the URL', switchedOff);
+if (switchedOff.layers?.installed.length) {
+    failures.push('#veryanti=off still installed layers');
+}
+if (!switchedOff.overlay) failures.push('#veryanti=off should leave the wall standing');
 
 console.log('');
 if (failures.length) {
