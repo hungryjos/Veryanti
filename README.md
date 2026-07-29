@@ -47,6 +47,7 @@ Zes onafhankelijke lagen; faalt er één, dan blijven de andere werken.
 | **Probe-spoofing** | Een request naar `doubleclick.net` of `/ads.js` dat je blocker afkapt, wordt omgeleid of afgevangen zodat de site een geslaagd antwoord ziet in plaats van een netwerkfout. Geldt voor `<script src>`, `<img src>`, `fetch()` en `XMLHttpRequest`. |
 | **Timerfilter** | `setTimeout`/`setInterval`-callbacks waarvan de broncode over adblock-detectie gaat, worden niet uitgevoerd. Zo stopt de lus die het scherm steeds opnieuw toont. |
 | **DOM-opruiming** | Overlays met adblock-teksten (NL/EN/DE/FR/ES/IT) worden verwijderd, inclusief de donkere achtergrondlaag, en `overflow: hidden` / `position: fixed` / blur op `<body>` wordt teruggedraaid zodat je weer kunt scrollen. |
+| **Tekstscan** | Zoekt de melding op de woorden zelf ("Please consider disabling your ad blocker") en gooit het vakje eromheen weg — ook als de klassenaam nergens naar verwijst. Loopt omhoog tot de balk of dialoog, maar stopt vóór de player en vóór grote stukken pagina. |
 | **Popup-blokkade** | `window.open()` zonder echte klik erachter wordt geweigerd (popunders), en `onbeforeunload` wordt genegeerd. |
 
 ## Bijstellen per site
@@ -77,7 +78,12 @@ beschikbaar in de console:
 __veryanti.sweep()     // handmatig opruimen
 __veryanti.removed     // aantal verwijderde elementen
 __veryanti.settings    // actieve configuratie voor deze host
+__veryanti.installed   // lagen die draaien
+__veryanti.failed      // lagen die bij het opstarten stukliepen
 ```
+
+Bestaat `window.__veryanti` niet, dan draait het script helemaal niet op die
+pagina — controleer je `@match`-regels en of het script aanstaat in je manager.
 
 ## Als iets stukgaat
 
@@ -87,6 +93,8 @@ Zet de lagen één voor één uit in `CONFIG` om te zien welke de boosdoener is:
   Sites die zelf hun layout meten kunnen struikelen over de nepafmetingen.
 * **Legitieme popup opent niet** (login, betaling) → `blockPopups: false`.
 * **Een knop of menu doet niets meer** → `filterTimers: false`.
+* **Er verdwijnt tekst die je wilde lezen** (bijvoorbeeld een pagina die zelf
+  over adblockers gaat) → `textScan: false`.
 * **Er verdwijnt te veel** → `cleanDom: false`, of laat
   `aggressiveOverlayRemoval` op `false` staan (standaard). Aan zetten verwijdert
   álle schermvullende lagen met een hoge z-index, ook echte lightboxen.

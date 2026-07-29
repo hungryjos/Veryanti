@@ -2,7 +2,7 @@
 // @name         Veryanti — anti-adblock neutralizer
 // @name:nl      Veryanti — anti-adblock neutralisator
 // @namespace    https://github.com/hungryjos/Veryanti
-// @version      1.0.0
+// @version      1.1.0
 // @description  Neutralises anti-adblock walls: fakes ad-bait visibility, stubs detector libraries, spoofs blocked ad probes, removes "disable your adblocker" overlays and restores page scrolling.
 // @description:nl  Schakelt anti-adblock muren uit: maakt lokaas-elementen "zichtbaar", vervangt detectie-bibliotheken, spooft geblokkeerde ad-requests, verwijdert "zet je adblocker uit"-overlays en herstelt het scrollen.
 // @author       hungryjos
@@ -64,6 +64,12 @@
 
         /** Remove nag overlays and keep the page scrollable. */
         cleanDom: true,
+
+        /**
+         * Search the page text for adblock nagging and remove whatever holds
+         * it — catches banners and bars whose class names give nothing away.
+         */
+        textScan: true,
 
         /** Block window.open() popunders. */
         blockPopups: true,
@@ -505,10 +511,27 @@
         }
     `;
 
+    /**
+     * At document-start <html> may not exist yet, so anything touching the
+     * DOM has to wait for it. Observing `document` itself works even while
+     * the tree is empty.
+     */
+    function whenDocumentElement(fn) {
+        if (doc.documentElement) { fn(); return; }
+        const observer = new MutationObserver(() => {
+            if (!doc.documentElement) return;
+            observer.disconnect();
+            fn();
+        });
+        observer.observe(doc, { childList: true, subtree: true });
+    }
+
     function injectStyle(css) {
+        const root = doc.head || doc.documentElement;
+        if (!root) return null;
         const style = doc.createElement('style');
         style.textContent = css;
-        (doc.head || doc.documentElement).appendChild(style);
+        root.appendChild(style);
         return style;
     }
 
@@ -571,6 +594,102 @@
         }
     }
 
+    /**
+     * Content that must survive: the player, and anything holding it. The
+     * text scan walks up the tree and stops before these.
+     */
+    const PROTECTED_SELECTOR = 'video, audio, [id*="player" i], [class*="player" i]';
+
+    function holdsProtectedContent(el) {
+        try {
+            if (el.matches && el.matches(PROTECTED_SELECTOR)) return true;
+            return !!(el.querySelector && el.querySelector(PROTECTED_SELECTOR));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    const SKIP_TAGS = /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA|TITLE|TEMPLATE)$/;
+
+    /**
+     * From the element holding nagging text, walk up to the box that holds
+     * the whole notice — the bar, banner or dialog — without swallowing the
+     * page. Returns null when nothing can be removed safely.
+     */
+    function nagContainer(start) {
+        const MAX_TEXT = 900;
+        let node = start;
+        let candidate = null;
+
+        while (node && node !== doc.body && node !== doc.documentElement) {
+            if (holdsProtectedContent(node)) break;
+            const text = (node.innerText || node.textContent || '');
+            if (text.length > MAX_TEXT) break;
+
+            candidate = node;
+
+            let style;
+            try { style = nativeGetComputedStyle(node); } catch (e) { style = null; }
+            // A positioned layer, or a box sitting straight in <body>, is
+            // where a notice normally ends.
+            if (style && (style.position === 'fixed' || style.position === 'sticky')) {
+                return node;
+            }
+            if (node.parentElement === doc.body) return node;
+
+            node = node.parentElement;
+        }
+        return candidate;
+    }
+
+    /** Find adblock nagging by its wording, whatever the element is called. */
+    function scanForNagText() {
+        if (!doc.body) return;
+
+        let walker;
+        try {
+            walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    const data = node.data;
+                    if (!data || data.length < 8 || data.length > 400) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    const parent = node.parentElement;
+                    if (!parent || SKIP_TAGS.test(parent.tagName)) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NAG_TEXT_RE.test(data)
+                        ? NodeFilter.FILTER_ACCEPT
+                        : NodeFilter.FILTER_REJECT;
+                },
+            });
+        } catch (e) {
+            return;
+        }
+
+        const hits = [];
+        while (walker.nextNode()) hits.push(walker.currentNode);
+        if (!hits.length) return;
+
+        let removedAny = false;
+        for (const textNode of hits) {
+            const parent = textNode.parentElement;
+            if (!parent || !parent.isConnected) continue;
+
+            let style;
+            try { style = nativeGetComputedStyle(parent); } catch (e) { continue; }
+            if (!style || style.display === 'none' || style.visibility === 'hidden') {
+                continue; // already invisible, leave it alone
+            }
+
+            const container = nagContainer(parent);
+            if (!container || container === doc.body) continue;
+            kill(container, 'nag text: ' + textNode.data.trim().slice(0, 60));
+            removedAny = true;
+        }
+        if (removedAny) removeBackdrops();
+    }
+
     let removedCount = 0;
 
     function kill(el, reason) {
@@ -620,6 +739,8 @@
         });
         if (hit) removeBackdrops();
 
+        if (settings.textScan) scanForNagText();
+
         for (const selector of unhideSelectors) {
             let nodes;
             try { nodes = doc.querySelectorAll(selector); } catch (e) { continue; }
@@ -635,8 +756,6 @@
     }
 
     function installDomCleanup() {
-        injectStyle(UNLOCK_CSS);
-
         const observer = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
@@ -647,7 +766,8 @@
             unlockScrolling();
         });
 
-        const start = () => {
+        whenDocumentElement(() => {
+            injectStyle(UNLOCK_CSS);
             observer.observe(doc.documentElement, {
                 childList: true,
                 subtree: true,
@@ -655,10 +775,7 @@
                 attributeFilter: ['class', 'style'],
             });
             sweep();
-        };
-
-        if (doc.documentElement) start();
-        else doc.addEventListener('readystatechange', start, { once: true });
+        });
 
         doc.addEventListener('DOMContentLoaded', sweep);
         win.addEventListener('load', sweep);
@@ -710,11 +827,16 @@
         ['blockPopups', installPopupGuard],
     ];
 
+    const installed = [];
+    const failed = [];
+
     for (const [flag, install] of steps) {
         if (!settings[flag]) continue;
         try {
             install();
+            installed.push(flag);
         } catch (err) {
+            failed.push({ layer: flag, error: String(err) });
             warn(flag + ' failed:', err);
         }
     }
@@ -724,8 +846,10 @@
         Object.defineProperty(win, '__veryanti', {
             configurable: true,
             value: {
-                version: '1.0.0',
+                version: '1.1.0',
                 settings,
+                installed,
+                failed,
                 rules: { remove: removeSelectors, unhide: unhideSelectors },
                 sweep,
                 get removed() { return removedCount; },

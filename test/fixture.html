@@ -7,6 +7,8 @@
   /* Simulates what a blocker's filter list does to bait elements. */
   .ad-banner, #ad-slot-top, ins.adsbygoogle { display: none !important; }
 
+  #topbar { position: sticky; top: 0; background: #333; color: #fff; padding: 8px; }
+
   body.modal-open { overflow: hidden; }
   #adblock-overlay {
     position: fixed; inset: 0; z-index: 99999;
@@ -17,6 +19,12 @@
 </style>
 </head>
 <body>
+  <!-- Polite nag bar: no telltale class name, so only the text scan finds it. -->
+  <div id="topbar" class="sticky-message">
+    <span>Please consider disabling your ad blocker to support us.</span>
+    <button type="button">OK</button>
+  </div>
+
   <div class="ad-banner">ad</div>
   <div id="ad-slot-top">ad</div>
   <ins class="adsbygoogle"></ins>
@@ -39,6 +47,12 @@
     document.body.appendChild(overlay);
     document.body.classList.add('modal-open');
     document.getElementById('player').style.display = 'none';
+  }
+
+  // ?wall=1 raises the wall unconditionally, so the DOM-cleanup layer is
+  // tested on its own even when every detection has been neutralised.
+  if (location.search.indexOf('wall') !== -1) {
+    document.addEventListener('DOMContentLoaded', showWall);
   }
 
   // 1. Bait element size check.
